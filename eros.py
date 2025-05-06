@@ -1,26 +1,50 @@
 import streamlit as st
 import pandas as pd
-import seaborn as sb
-import matplotlib.pyplot as plt
+import plotly.express as px
 
-# Load and preprocess data
-df = pd.read_csv("IFA.csv")
-df = df.drop("Unnamed: 0", axis=1)
-df["Date"] = pd.to_datetime(df["Date"])
+# Load data
+@st.cache_data
+def load_data():
+    df = pd.read_csv("IFA.csv")
+    df = df.drop("Unnamed: 0", axis=1)
+    df["Date"] = pd.to_datetime(df["Date"])
+    return df
 
-# Streamlit UI
-st.title("Stock Closing Price Viewer")
+df = load_data()
 
-# Stock selection
+# UI Layout
+st.title("📈 Interactive Stock Data Explorer")
+
+# Sidebar Controls
+st.sidebar.header("Filter Options")
+
 symbols = df["Symbol"].unique()
-selected_symbol = st.selectbox("Select a stock symbol:", symbols)
+selected_symbols = st.sidebar.multiselect("Select stock symbol(s):", symbols, default=[symbols[0]])
+
+# Filter by date
+min_date = df["Date"].min()
+max_date = df["Date"].max()
+date_range = st.sidebar.date_input("Select date range:", [min_date, max_date], min_value=min_date, max_value=max_date)
+
+# Show volume toggle
+show_volume = st.sidebar.checkbox("Show Volume Chart", value=False)
 
 # Filter data
-stk = df[df["Symbol"] == selected_symbol]
+filtered_df = df[(df["Symbol"].isin(selected_symbols)) & 
+                 (df["Date"] >= pd.to_datetime(date_range[0])) & 
+                 (df["Date"] <= pd.to_datetime(date_range[1]))]
 
 # Plotting
-st.subheader(f"Closing Price of {selected_symbol}")
-fig, ax = plt.subplots(figsize=(10, 5))
-sb.lineplot(x=stk["Date"], y=stk["Close"], ax=ax)
-plt.xticks(rotation=90)
-st.pyplot(fig)
+if not filtered_df.empty:
+    st.subheader("📊 Closing Price Over Time")
+    fig = px.line(filtered_df, x="Date", y="Close", color="Symbol", markers=True,
+                  title="Stock Closing Prices", labels={"Close": "Closing Price"})
+    fig.update_layout(xaxis_title="Date", yaxis_title="Closing Price (¥)")
+    st.plotly_chart(fig, use_container_width=True)
+
+    if show_volume:
+        st.subheader("📦 Volume Over Time")
+        vol_fig = px.bar(filtered_df, x="Date", y="Volume", color="Symbol", title="Stock Volume Traded")
+        st.plotly_chart(vol_fig, use_container_width=True)
+else:
+    st.warning("No data available for the selected options.")
